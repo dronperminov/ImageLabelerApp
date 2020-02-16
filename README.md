@@ -2,6 +2,8 @@
 Implementation of flask application for image labeling
 
 ## Start work
+* Install python3 and pip (if you haven't installed it yet)
+* Install some packages via pip (`pip install -r requirements.txt`)
 * Move images for labeling to `images` folder
 * Edit labels dictionary in `app.py` file for your task
 ```python

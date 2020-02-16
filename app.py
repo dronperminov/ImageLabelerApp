@@ -143,4 +143,7 @@ def save_file():
 	return redirect("/") # возвращаем на страницу разметки
 
 if __name__ == '__main__':
+	if not os.path.exists(app.config['LABELS_FOLDER']): # если папка с размеченными изображениями ещё не создана
+		os.makedirs(app.config['LABELS_FOLDER']) # создаём её
+
 	app.run(debug=True)

@@ -11,3 +11,15 @@
 
 .btn { background: #fff; color: #000; border: 2px solid #000; padding: 5px 10px; margin: 1px; }
 .btn:hover { background: #fff; color: #000; cursor: pointer; border: 3px solid #ffcd00; margin: 0px; }
+
+#mode-box { display: none }
+
+@media (max-width: 767px) {
+	.labeler, .labeler-image, .labeler-menu { display: block; width: 100%; }
+	.labeler-menu { padding: 10px 0 0 0; margin-left: -1px; }
+	.labeler-menu textarea { width: calc(100% - 4px); }
+
+	#mode-box { display: inline; position: fixed; top: 10px; z-index: 1; visibility: hidden; }
+	#mode-box::after { display: block; width: 32px; height: 32px; content: ""; background-image: url('scroll.png'); background-size: 32px 32px; visibility: visible; }
+	#mode-box:checked::after { background-image: url('label.png'); }
+}

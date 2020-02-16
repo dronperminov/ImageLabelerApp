@@ -46,12 +46,14 @@ def make_labeler(filename, total):
 		<head>
 			<title>Средство для разметки изображений</title>
 			<meta charset="utf-8">
-			<link rel="stylesheet" href="css/labeler.css?v=8" />
+			<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
+			<link rel="stylesheet" href="css/labeler.css" />
 		</head>
 		<body>
 			<h1>Bounding box annotator (осталось разметить: {total})</h1>
 
 			<div class="labeler" draggable=false oncontextmenu="return false;">
+				<input id="mode-box" type="checkbox"/>
 				<div class="labeler-image" draggable=false>
 					<img id="img" src="/images/{filename}" draggable=false>
 				</div>

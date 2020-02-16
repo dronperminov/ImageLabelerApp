@@ -1,5 +1,5 @@
 function Labeler(labels, colors) {
-	this.diff = 5
+	this.diff = $(window).innerWidth() < 767 ? 15 : 5
 
 	this.labels = labels
 	this.colors = colors
@@ -38,6 +38,42 @@ Labeler.prototype.initialize = function() {
 	$(document).mousemove(function(e) { labeler.mousemove(e) })
 	$(document).keydown(function(e) { labeler.keydown(e) })
 
+	$(document).on("touchstart", function(e) {
+		if (!$("#mode-box").is(":checked"))
+			return
+
+		if (e.originalEvent.touches.length > 2)
+			return
+
+		if (e.originalEvent.touches.length == 1)
+			e.originalEvent.targetTouches[0].button = 0
+		else
+			e.originalEvent.targetTouches[0].button = 2
+
+		labeler.mousedown(e.originalEvent.targetTouches[0])
+	})
+
+	$(document).on("touchend", function(e) {
+		if (!$("#mode-box").is(":checked"))
+			return
+
+		if (e.originalEvent.changedTouches.length == 1) {
+			e.originalEvent.changedTouches[0].button = 0
+			labeler.mouseup(e.originalEvent.changedTouches[0])
+		}
+	})
+
+	document.addEventListener("touchmove", function(e) {
+		if (!$("#mode-box").is(":checked"))
+			return
+
+		if (e.changedTouches.length == 1) {
+			labeler.mousemove(e.changedTouches[0])
+			e.preventDefault()
+			return false
+		}
+	}, { passive: false })
+
 	$(document).on("dragstart", function(e) {
 		if (e.target.nodeName.toUpperCase() == "IMG")
 			return false;
@@ -46,6 +82,8 @@ Labeler.prototype.initialize = function() {
 	$("#reset-btn").click(function(e) {
 		labeler.remove_all()
 	})
+
+	$("#mode-box").css("top", labeler.img.offset().top + "px")
 
 	this.show_entities()
 }

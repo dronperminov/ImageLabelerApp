@@ -39,6 +39,17 @@ def get_labels_info():
 	info = [str(i + 1) + ' - ' + label for i, label in enumerate(labels.keys())]
 	return str(info)[1:-1].replace("'", "")
 
+def get_entities(filename):
+	path = os.path.join(app.config['LABELS_FOLDER'], filename + '.json')
+
+	if not os.path.exists(path):
+		return []
+
+	with open(path, 'r') as f:
+		entities = json.load(f)['entities']
+
+	return entities
+
 def make_labeler(filename, total):
 	return '''
 		<!DOCTYPE html>
@@ -82,8 +93,10 @@ def make_labeler(filename, total):
 			<script type="text/javascript">
 				const labels = {labels}
 				const colors = {colors}
+				const entities = {entities}
 
-				let labeler = new Labeler(labels, colors)
+				let labeler = new Labeler(labels, colors, entities)
+				labeler.init_from_entities(entities)
 
 				$("#save-btn").click(function(e) {{
 					if (confirm("Saving: are you sure?")) {{
@@ -97,7 +110,7 @@ def make_labeler(filename, total):
 			</script>
 		</body>
 		</html>
-			'''.format(filename=filename, total=total, labels=str(list(labels.keys())), colors=get_js_colors(), info=get_labels_info())
+			'''.format(filename=filename, total=total, entities=get_entities(filename), labels=str(list(labels.keys())), colors=get_js_colors(), info=get_labels_info())
 
 @app.route('/', methods=['GET'])
 def label_image():

@@ -1,39 +1,123 @@
 # ImageLabelerApp
-Implementation of flask application for image labeling
+Приложение для разметки ограничивающих прямоугольников (bounding box) на изображениях. Позволяет настроить список используемых классов и запустить web интерфейс для выполнения разметки.
 
-## Start work
-* Install python3 and pip (if you haven't installed it yet)
-* Install some packages via pip (`pip install -r requirements.txt`)
-* Move images for labeling to `images` folder
-* Edit labels dictionary in `app.py` file for your task
-```python
-labels = {
-	'text' : (255, 0, 0),
-	'table' : (0, 255, 0),
-	'picture' : (0, 0, 255),
+## Конфигурация
+Все настройки задаются в файле `config.json`. Пример конфигурационного файла:
+
+```json
+{
+    "title": "Заголовок страницы",
+    "port": 5000,
+    "labels": {
+        "text": [255, 0, 0],
+        "table": [0, 255, 0],
+        "picture": [0, 0, 255]
+    },
+
+    "sampling": "sequential",
+    "images_path": "images",
+    "labeled_path": "labeled",
+
+    "bbox_format": "xywh",
+    "use_relative": true
+}
+
+```
+
+### Формат задания классов
+
+Имена классов задаются в виде словаря, в котором ключу соотвествует название класса, а значению список из трёх целых чисел цвета в rgb формате.
+
+### Папка с изображениями и результатом разметки
+
+Изображения, которые необходимо разметить должны находиться в папке, задаваемой параметром `images_path` (по умолчанию `images`). После разметки очередного изображения оно будет перемещаться в папку с размеченными изображениями, задаваемую параметром `labeled_path` (по умолчанию `labeled`, автоматически создаётся, если не существует при первом запуске). В этой же папке будут располагаться json файлы, содержащие разметку для соответствующего изображения.
+
+### Режим разметки изображений
+
+Доступны два режима разметки, задаваемые с помощью параметра `sampling`:
+* `sequential` - изображения выбираются последовательно, упорядоченно по имени (используется по умолчанию)
+* `random` - изображения выбираются в случайном порядке
+
+### Режимы сохранения ббоксов
+
+Режимы сохранения ббоксов определяются двумя параметрами:
+
+* `bbox_format` - определяет формат хранения координат (по умолчанию `xywh`)
+* `use_relative` - определяет использование нормализованных координат (по умолчанию `true`).
+
+
+#### Примеры форматов ббоксов
+
+* `xywh` - сохраняются координаты левого верхнего угла и ширина с высотой:
+
+```
+{
+    "label": "text",
+    "x": 0.1,
+    "y": 0.1,
+    "width": 0.5,
+    "height": 0.25
 }
 ```
-* Launch application using `python app.py`
-* Go to `localhost:5000` and label your images
 
-## Controls
-### Add bounding box
-While holding the left mouse button, move the cursor to another point and release the mouse button. Select the desired label in the list that appears or press the number of this label on the keyboard.
+* `xyxy` - сохраняются координаты левого верхнего и правого нижнего углов
 
-### Remove bounding box
-Hover over the bounding box and click the right mouse button (for smartphones: double-click on the bounding box).
+```
+{
+    "label": "text",
+    "x1": 0.1,
+    "y1": 0.1,
+    "x2": 0.6,
+    "y2": 0.35
+}
+```
 
-### Move bounding box
-Hover over the bounding box, hold the left mouse button, move bbox to necessary point and release the mouse button.
+* `xcycwh` - сохраняются координаты центра и ширина с высотой
 
-### Resize bounding box
-Hover over the border of the bounding rectangle, hold down the left mouse button, drag the border to the desired location and release the button.
+```
+{
+    "label": "text",
+    "xc": 0.35,
+    "yc": 0.225,
+    "width": 0.5,
+    "height": 0.25
+}
+```
 
-### Scale image
-Press `+` or `-` key to zoom in and out respectively
 
-### Remove all bounding boxes
-Press to the `reset` button.
+## Запуск приложения
 
-### Save bounding boxes
-Press to the `save` button and labeled image will move from `images` to the `labels` folder with creating .json file and .jpg image with bounding boxes.
+* Перед первым запуском установите все зависимости:
+```bash
+pip install -r requirements.txt
+```
+
+* Поместите изображения для разметки в папку `images_path`, указанную в конфиге
+
+* Запустите систему разметки (интерфейс будет доступен по адресу `localhost:port`):
+```bash
+python app.py
+```
+
+## Доступные действия
+
+### Добавление ббокса
+Удерживая левую кнопку мыши, переместите курсор в другую точку и отпустите кнопку мыши. Выберите нужную метку в появившемся списке или нажмите номер этой метки на клавиатуре.
+
+### Удаление ббокса
+Наведите указатель мыши на ббокс и щёлкните правой кнопкой мыши.
+
+### Перемещение ббокса
+Наведите курсор на ббокс, зажмите левую кнопку мыши, переместите рамку в нужную точку и отпустите кнопку мыши.
+
+### Изменение размера ббокса
+Наведите указатель мыши на границу ббокса, зажмите левую кнопку мыши, перетащите границу в нужное место и отпустите кнопку.
+
+### Масштабирование изображения
+Нажмите клавишу `+` или `-`, чтобы увеличить или уменьшить масштаб соответственно.
+
+### Удаление разметки
+Нажмите на кнопку `reset`.
+
+### Сохранение разметки
+Нажмите кнопку `save`. Изображение с разметкой переместится из папки `images_path` в папку `labeled_path`. Также будут созданы файл `.json` с разметкой и тестовое изображение с отрисованной разметкой.

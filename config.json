@@ -1,4 +1,6 @@
 {
+    "title": "test",
+    "port": 5000,
     "labels": {
         "text": [255, 0, 0],
         "table": [0, 255, 0],
@@ -7,5 +9,8 @@
 
     "sampling": "sequential",
     "images_path": "images",
-    "labeled_path": "labeled"
+    "labeled_path": "labeled",
+
+    "bbox_mode": "xywh",
+    "use_relative": true
 }

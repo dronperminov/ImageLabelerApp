@@ -6,6 +6,10 @@ import cv2
 from flask import Flask
 from flask import request, redirect, send_from_directory
 
+from entity_converter import EntityConverter
+from label_managers.json_label_manager import JsonLabelManager
+from label_managers.multiple_json_label_manager import MultipleJsonLabelManager
+
 
 with open("config.json", encoding="utf-8") as f:
 	config = json.load(f)
@@ -21,16 +25,24 @@ title = config.get('title', 'Bounding box annotator')
 port = config.get('port', 5000)
 labels = config['labels']
 
-bbox_format = config.get('bbox_format', 'xywh')
-use_relative = config.get('use_relative', True)
-
-if bbox_format not in ['xywh', 'xyxy', 'xcycwh']:
-	raise ValueError(f'Invalid bbox format ({bbox_format})')
-
 sampling = config.get('sampling', 'sequential')
 
 if sampling not in ['random', 'sequential']:
 	raise ValueError(f'Invalid sampling mode ({sampling})')
+
+label_mode = config.get('label_mode', 'json')
+
+if label_mode == 'json':
+	labeled_name = config.get('labeled_name', 'labeled.json')
+	label_manager = JsonLabelManager(os.path.join(app.config['LABELS_FOLDER'], labeled_name))
+elif label_mode == 'multiple-json':
+	label_manager = MultipleJsonLabelManager(app.config['LABELS_FOLDER'])
+else:
+	raise ValueError(f'Invalid label mode ({label_mode})')
+
+bbox_format = config.get('bbox_format', 'xywh')
+use_relative = config.get('use_relative', True)
+entity_converter = EntityConverter(bbox_format, use_relative)
 
 
 @app.route('/images/<filename>')
@@ -48,48 +60,11 @@ def css_file(filename):
 	return send_from_directory(app.config['CSS_FOLDER'], filename)
 
 
-def get_entities(filename):
-	json_path = os.path.join(app.config['LABELS_FOLDER'], f'{filename}.json')
-
-	if not os.path.exists(json_path):
-		return []
-
-	with open(json_path, 'r') as f:
-		data = json.load(f)
-
-	img_path = os.path.join(app.config['IMAGES_FOLDER'], filename)
-	img = cv2.imread(img_path)
-	img_height = img.shape[0]
-	img_width = img.shape[1]
-
-	entities = data['entities']
-
-	for i, entity in enumerate(entities):
-		if bbox_format == 'xyxy':
-			x, y, x2, y2 = entity['x1'], entity['y1'], entity['x2'], entity['y2']
-			w, h = x2 - x, y2 - y
-		elif bbox_format == 'xcycwh':
-			xc, yc, w, h = entity['xc'], entity['yc'], entity['width'], entity['height']
-			x, y = xc - w / 2, yc - h / 2
-		else:
-			x, y, w, h = entity['x'], entity['y'], entity['width'], entity['height']
-
-		if not use_relative:
-			x, y, w, h = x / img_width, y / img_height, w / img_width, h / img_height
-
-		entities[i]['x'] = x
-		entities[i]['y'] = y
-		entities[i]['width'] = w
-		entities[i]['height'] = h
-
-	return entities
-
-
 def make_labeler(filename, total):
 	colors_js = ", ".join(f'"{r}, {g}, {b}"' for r, g, b in labels.values())
 	labels_js = ", ".join(f'"{key}"' for key in labels)
 	info = ", ".join(f"{i + 1} - {label}" for i, label in enumerate(labels.keys()) if i < 10)
-	entities = get_entities(filename)
+	entities = label_manager.get_entities(filename)
 
 	return f'''
 		<!DOCTYPE html>
@@ -189,37 +164,6 @@ def draw_labeling(img, data: dict, test_path: str):
 	cv2.imwrite(test_path, img)
 
 
-def convert_bbox(entity: dict, height: int, width: int) -> dict:
-	x, y = entity['x'], entity['y']
-	w, h = entity['width'], entity['height']
-
-	if not use_relative:
-		x, y = int(x * width), int(y * height)
-		w, h = int(w * width), int(h * height)
-
-	converted_entity = {
-		'label': entity['label']
-	}
-
-	if bbox_format == 'xywh':
-		converted_entity['x'] = x
-		converted_entity['y'] = y
-		converted_entity['width'] = w
-		converted_entity['height'] = h
-	elif bbox_format == 'xyxy':
-		converted_entity['x1'] = x
-		converted_entity['y1'] = y
-		converted_entity['x2'] = x + w
-		converted_entity['y2'] = y + h
-	elif bbox_format == 'xcycwh':
-		converted_entity['xc'] = x + w / 2
-		converted_entity['yc'] = y + h / 2
-		converted_entity['width'] = w
-		converted_entity['height'] = h
-
-	return converted_entity
-
-
 @app.route('/save')
 def save_file():
 	data = json.loads(request.args.get('entities'))
@@ -227,20 +171,18 @@ def save_file():
 
 	prev_img_path = os.path.join(app.config['IMAGES_FOLDER'], name)
 	img_path = os.path.join(app.config['LABELS_FOLDER'], name)
-	json_path = os.path.join(app.config['LABELS_FOLDER'], f'{name}.json')
 	test_path = os.path.join(app.config['LABELS_FOLDER'], f'test_{name}')
 
 	img = cv2.imread(prev_img_path)
-	h, w = img.shape[0], img.shape[1]
+	img_height, img_width = img.shape[0], img.shape[1]
 	draw_labeling(img, data, test_path)
 
 	os.replace(prev_img_path, img_path)
 
 	for i, entity in enumerate(data['entities']):
-		data['entities'][i] = convert_bbox(entity, h, w)
+		data['entities'][i] = entity_converter.convert(entity, img_height, img_width)
 
-	with open(json_path, 'w') as f:
-		json.dump(data, f, indent=4, ensure_ascii=False)
+	label_manager.save_entities(name, data['entities'])
 
 	return redirect("/")
 

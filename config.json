@@ -10,7 +10,9 @@
     "sampling": "sequential",
     "images_path": "images",
     "labeled_path": "labeled",
+    "labeled_name": "test.json",
+    "label_mode": "json",
 
-    "bbox_mode": "xywh",
+    "bbox_format": "xywh",
     "use_relative": true
 }

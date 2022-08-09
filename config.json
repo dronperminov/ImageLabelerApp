@@ -1,0 +1,11 @@
+{
+    "labels": {
+        "text": [255, 0, 0],
+        "table": [0, 255, 0],
+        "picture": [0, 0, 255]
+    },
+
+    "sampling": "sequential",
+    "images_path": "images",
+    "labeled_path": "labeled"
+}

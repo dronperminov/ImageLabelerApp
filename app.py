@@ -4,43 +4,43 @@ import json
 import cv2
 
 from flask import Flask
-from flask import request, send_file, redirect, send_from_directory
+from flask import request, redirect, send_from_directory
+
+
+with open("config.json", encoding="utf-8") as f:
+	config = json.load(f)
 
 app = Flask(__name__)
 	
-app.config['IMAGES_FOLDER'] = 'images' # папка с изображениями для разметки
-app.config['LABELS_FOLDER'] = 'labeled' # папка для сохраняемых изображений и разметок
-app.config['JS_FOLDER'] = 'js' # папка с js кодом
-app.config['CSS_FOLDER'] = 'css' # папка со стилями
+app.config['IMAGES_FOLDER'] = config.get('images_path', 'images')
+app.config['LABELS_FOLDER'] = config.get('labeled_path', 'labeled')
+app.config['JS_FOLDER'] = 'js'
+app.config['CSS_FOLDER'] = 'css'
 
-# метки и соответствующие им цвета (BGR формат)
-labels = {
-	'text' : (255, 0, 0),
-	'table' : (0, 255, 0),
-	'picture' : (0, 0, 255),
-}
+labels = config['labels']
+sampling = config.get('sampling', 'sequential')
+
+if sampling not in ['random', 'sequential']:
+	raise ValueError(f'Invalid sampling mode ({sampling})')
+
 
 @app.route('/images/<filename>')
 def image_file(filename):
 	return send_from_directory(app.config['IMAGES_FOLDER'], filename)
 
+
 @app.route('/js/<filename>')
 def js_file(filename):
 	return send_from_directory(app.config['JS_FOLDER'], filename)
+
 
 @app.route('/css/<filename>')
 def css_file(filename):
 	return send_from_directory(app.config['CSS_FOLDER'], filename)
 
-def get_js_colors():
-	return str([str(r) + ', ' + str(g) + ', ' + str(b) for b, g, r in labels.values()])
-
-def get_labels_info():
-	info = [str(i + 1) + ' - ' + label for i, label in enumerate(labels.keys())]
-	return str(info)[1:-1].replace("'", "")
 
 def get_entities(filename):
-	path = os.path.join(app.config['LABELS_FOLDER'], filename + '.json')
+	path = os.path.join(app.config['LABELS_FOLDER'], f'{filename}.json')
 
 	if not os.path.exists(path):
 		return []
@@ -50,8 +50,13 @@ def get_entities(filename):
 
 	return entities
 
+
 def make_labeler(filename, total):
-	return '''
+	colors_js = ", ".join(f'"{r}, {g}, {b}"' for r, g, b in labels.values())
+	labels_js = ", ".join(f'"{key}"' for key in labels)
+	info = ", ".join(f"{i + 1} - {label}" for i, label in enumerate(labels.keys()) if i < 10)
+
+	return f'''
 		<!DOCTYPE html>
 		<html>
 		<head>
@@ -91,12 +96,14 @@ def make_labeler(filename, total):
 			<script src="js/labeler.js"></script>
 
 			<script type="text/javascript">
-				const labels = {labels}
-				const colors = {colors}
-				const entities = {entities}
+				const labels = [{labels_js}]
+				const colors = [{colors_js}]
+				const entities = {get_entities(filename)}
 
-				let labeler = new Labeler(labels, colors, entities)
-				labeler.init_from_entities(entities)
+				$('.labeler-image').ready(function() {{
+					let labeler = new Labeler(labels, colors, entities)
+					labeler.init_from_entities(entities)
+				}})
 
 				$("#save-btn").click(function(e) {{
 					if (confirm("Saving: are you sure?")) {{
@@ -110,20 +117,27 @@ def make_labeler(filename, total):
 			</script>
 		</body>
 		</html>
-			'''.format(filename=filename, total=total, entities=get_entities(filename), labels=str(list(labels.keys())), colors=get_js_colors(), info=get_labels_info())
+			'''
+
 
 @app.route('/', methods=['GET'])
 def label_image():
-	images = os.listdir(app.config['IMAGES_FOLDER']) # получаем все доступные изображения
+	images = os.listdir(app.config['IMAGES_FOLDER'])
+	images = sorted(images)
 
-	if len(images) == 0: # если их нет, то и размечать нечего
+	if len(images) == 0:
 		return "Все изображения были размечены"
 
-	return make_labeler(random.choice(images), len(images)) # иначе создаём страницу с интерфейсом для разметки
+	if sampling == 'random':
+		image = random.choice(images)
+	else:
+		image = images[0]
 
-# сохранение изображения с отрисовкой разметки
+	return make_labeler(image, len(images))
+
+
 def draw_labeling(name, data):
-	img = cv2.imread(app.config['IMAGES_FOLDER'] + '/' + name) # открываем размеченное изображение
+	img = cv2.imread(app.config['IMAGES_FOLDER'] + '/' + name)
 
 	for entity in data['entities']:
 		label = entity['label']
@@ -132,33 +146,35 @@ def draw_labeling(name, data):
 		x2 = int((entity['x'] + entity['width']) * img.shape[1])
 		y2 = int((entity['y'] + entity['height']) * img.shape[0])
 
-		color = labels[label] # получаем цвет метки
+		r, g, b = labels[label]
+		color = b, g, r
 
-		# накладываем слегка прозрачный bbox с выделенным объектом на картинку
 		tmp = img.copy()
 		cv2.rectangle(tmp, (x1, y1), (x2, y2), color, -1)
 		cv2.addWeighted(img, 0.8, tmp, 0.2, 0, img)
 		cv2.putText(img, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2, cv2.LINE_AA)
 		cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
 
-	cv2.imwrite(app.config['LABELS_FOLDER'] + '/test_' + name, img) # сохраняем созданное изображение
+	cv2.imwrite(app.config['LABELS_FOLDER'] + '/test_' + name, img)
+
 
 @app.route('/save')
 def save_file():
-	data = json.loads(request.args.get('entities')) # получаем размеченные объекты из json
-	name = data['name'] # получаем имя изображения
+	data = json.loads(request.args.get('entities'))
+	name = data['name']
 
-	draw_labeling(name.strip("/"), data) # отрисовываем результат разметки
+	draw_labeling(name.strip("/"), data)
 	
-	os.replace(app.config['IMAGES_FOLDER'] + '/' + name, app.config['LABELS_FOLDER'] + '/' + name) # перемещаем изображение в папку размеченных изображений
+	os.replace(os.path.join(app.config['IMAGES_FOLDER'], name), os.path.join(app.config['LABELS_FOLDER'], name))
 
-	with open(app.config['LABELS_FOLDER'] + '/' + name + '.json', 'w') as outfile:
-		json.dump(data, outfile, indent=4) # сохраняем json с объектами
+	with open(os.path.join(app.config['LABELS_FOLDER'], f'{name}.json'), 'w') as f:
+		json.dump(data, f, indent=4, ensure_ascii=False)
 
-	return redirect("/") # возвращаем на страницу разметки
+	return redirect("/")
+
 
 if __name__ == '__main__':
-	if not os.path.exists(app.config['LABELS_FOLDER']): # если папка с размеченными изображениями ещё не создана
-		os.makedirs(app.config['LABELS_FOLDER']) # создаём её
+	if not os.path.exists(app.config['LABELS_FOLDER']):
+		os.makedirs(app.config['LABELS_FOLDER'])
 
 	app.run(debug=True)
